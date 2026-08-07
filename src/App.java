@@ -1,25 +1,21 @@
 public class App {
+
+static final int MAX_HEALTH = 100;
+static final int STARTING_GOLD = 20;
+
     public static void main(String[] args) throws Exception {
+        String playerName = "Carlos";
+        int playerHealth = MAX_HEALTH;
+        boolean isAlive = true;
+        double critChance = 0.15;
 
-        String myName = "Carlos";
-        System.out.println(myName);
+        // TODO: make a String called enemyname, assign your choice.
+        String enemyName = "Zombie Knight";
+        // TODO: enemyHealth of some int between 0 and 50.
+        int enemyHealth = 35;
+        // TODO: enempyPower of some int between 1 and 10.
+        int enemyPower = 7;
 
-        myName = "Andrade";
-        System.out.println(myName);
-
-        char myLetter = '\u00A9';
-        System.out.println(myLetter);
-
-        int x = 3;
-        short y = 3;
-        byte b = 3;
-        long z = 3108970983L;
-
-        double d = 3.1415926538980897;
-        float f = 3.1415926538980897F;
-
-        boolean myBool = true;
-        boolean myBool2 = false;
 
     }
 }
