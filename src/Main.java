@@ -29,6 +29,15 @@ public class Main {
         int difficulty = in.nextInt();
         in.nextLine();   // consume the leftover newline.
 
+        String difficultyName = switch (difficulty) {
+            case 1 -> "Easy";
+            case 2 -> "Normal";
+            case 3 -> "Brutal";
+            default -> "Unknown";
+        };
+        System.out.println("Difficulty selected: " + difficultyName);
+        System.out.println("");
+
         int health = MAX_HEALTH;
         int gold = STARTING_GOLD;
         int level = 1;
@@ -100,22 +109,57 @@ public class Main {
         System.out.println("");
 
         int roll = 7;
-        int damage2;
+        int damage2 = 0;
+        int potions = 2;
 
-        if (roll >= 9) {
-            damage2 = enemyPower * 2;
-            System.out.println("CRITICAL HIT!");
-        } else if (roll >= 3) {
-            damage2 = enemyPower;
-            System.out.println("A solid hit.");
-        } else {
-            damage2 = 0;
-            System.out.println("You miss.");
+        System.out.print("[A]ttack  [D]efend  [P]otion  [F]lee: ");
+        String action = in.nextLine().trim().toUpperCase();
+        System.out.println("");
+
+        switch (action) {
+            case "A" -> {
+                if (roll >= 9) {
+                    damage2 = enemyPower * 2;
+                    System.out.println("CRITICAL HIT!");
+                } else if (roll >= 3) {
+                    damage2 = enemyPower;
+                    System.out.println("A solid hit.");
+                } else {
+                    damage2 = 0;
+                    System.out.println("You miss.");
+                }
+            }
+            case "D" -> {
+                health += 5;
+                System.out.println("You brace yourself defensively and recover 5 health.");
+            }
+            case "P" -> {
+                if (potions > 0) {
+                    health += 25;
+                    potions--;
+                    System.out.println("You drink a healing potion.");
+                } else {
+                    System.out.println("You have no potions left!");
+                }
+            }
+            case "F" -> {
+                alive = false;
+                System.out.println("You flee from the arena!");
+            }
+            default -> {
+                damage2 = 0;
+                System.out.println("Invalid action. You lose your window to strike.");
+            }
         }
+        System.out.println("");
+
+        String potionWord = potions == 1 ? "potion" : "potions";
+        String statusWord = health > (MAX_HEALTH / 2) ? "steady" : "faltering";
+        System.out.printf("Inventory status: %d %s remaining. Condition: %s.%n%n", 
+                          potions, potionWord, statusWord);
 
         enemyHealth -= damage2;
-        System.out.println("Enemy HP after attack: " + enemyHealth);
-        System.out.println("");
+        System.out.printf("%s has %d HP left.%n", enemyName, enemyHealth);
 
         if (enemyHealth <= 0) {
             System.out.println("The " + enemyName + " falls!");
@@ -128,11 +172,9 @@ public class Main {
         if (swings > 0 && hits / swings > 0.5) {
             System.out.println("Your aim is holding up.");
         }
-
         if (health < MAX_HEALTH / 4 && gold >= 10) {
             System.out.println("You should buy a potion.");
         }
-
         if (!alive || enemyHealth <= 0) {
             System.out.println("The fight is over.");
         }
