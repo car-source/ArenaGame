@@ -4,6 +4,8 @@ public class Main {
 
     static final int MAX_HEALTH = 100;
     static final int STARTING_GOLD = 20;
+    static final int ROWS = 5;
+    static final int COLS = 11;
 
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
@@ -56,6 +58,9 @@ public class Main {
         int enemyHealth = 30 + difficulty * 15;
         int enemyPower = 4 + difficulty * 3;
 
+        int playerRow = 2, playerCol = 1;
+        int enemyRow = 2, enemyCol = 9;
+
         System.out.printf("%-12s HP %3d/%3d  Gold %4d  Lv %d%n",
                           playerName, health, MAX_HEALTH, gold, level);
         System.out.printf("Alive %-5b  Crit %.0f%%%n", alive, critChance * 100);
@@ -65,6 +70,12 @@ public class Main {
                           playerName, enemyName, enemyHealth);
         System.out.print("Press Enter to begin...");
         in.nextLine();
+        System.out.println("");
+
+        for (int i = 3; i > 0; i--) {
+            System.out.println(i + "...");
+        }
+        System.out.println("FIGHT!");
         System.out.println("");
 
         System.out.println(enemyName.toUpperCase() + " blocks your path!");
@@ -120,20 +131,48 @@ public class Main {
         boolean playing = true;
 
         while (playing) {
+            System.out.println("=".repeat(40));
+
             System.out.printf("%n--- Turn %d ---%n", turnNumber);
             System.out.printf("%-12s HP %3d/%3d    %-14s HP %3d%n",
                               playerName, health, MAX_HEALTH, enemyName, enemyHealth);
+            System.out.println("");
+
+            for (int r = 0; r < ROWS; r++) {
+                for (int c = 0; c < COLS; c++) {
+                    char cell;
+                    if (r == playerRow && c == playerCol) {
+                        cell = '@';
+                    } else if (r == enemyRow && c == enemyCol) {
+                        cell = 'X';
+                    } else if (r == 0 || r == ROWS - 1) {
+                        cell = '-';
+                    } else if (c == 0 || c == COLS - 1) {
+                        cell = '|';
+                    } else {
+                        cell = ' ';
+                    }
+                    System.out.print(cell);
+                }
+                System.out.println();
+            }
+            System.out.println("");
+
+            boolean adjacent = (playerRow == enemyRow)
+                             && (Math.abs(playerCol - enemyCol) == 1);
 
             int roll = (turnNumber * 3) % 10 + 1;
             int damage2 = 0;
 
             System.out.println("Your move.");
-            System.out.print("[A]ttack  [D]efend  [P]otion  [F]lee: ");
+            System.out.print("[A]ttack  [D]efend  [P]otion  [F]lee  [L]eft  [R]ight: ");
             String action = in.nextLine().trim().toUpperCase();
 
             switch (action) {
                 case "A" -> {
-                    if (roll >= 9) {
+                    if (!adjacent) {
+                        System.out.println("You're too far away to strike.");
+                    } else if (roll >= 9) {
                         damage2 = enemyPower * 2;
                         System.out.println("CRITICAL HIT!");
                     } else if (roll >= 3) {
@@ -162,7 +201,21 @@ public class Main {
                     alive = false;
                     System.out.println("You run for the gate. The crowd howls.");
                 }
+                case "L" -> {
+                    playerCol--;
+                    System.out.println("You step left.");
+                }
+                case "R" -> {
+                    playerCol++;
+                    System.out.println("You step right.");
+                }
                 default -> System.out.println("The crowd jeers. You hesitate and lose the turn.");
+            }
+
+            if (playerCol < 1) {
+                playerCol = 1;
+            } else if (playerCol > COLS - 2) {
+                playerCol = COLS - 2;
             }
 
             System.out.printf("You have %d %s left.%n",
@@ -173,7 +226,7 @@ public class Main {
             System.out.println("");
 
             enemyHealth -= damage2;
-            if (alive && enemyHealth > 0) {
+            if (alive && enemyHealth > 0 && adjacent) {
                 health -= enemyPower;
                 System.out.printf("The %s strikes back for %d.%n", enemyName, enemyPower);
             }
