@@ -1,193 +1,331 @@
+
 import java.util.Scanner;
 
 public class Main {
 
     static final int MAX_HEALTH = 100;
     static final int STARTING_GOLD = 20;
+    static final int ROWS = 5;
+    static final int COLS = 11;
+    static final int PACK_SLOTS = 5;
 
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
 
-        String title = """
-                ========================
-                    THE ARENA
-                ========================
-                """;
-        System.out.print(title);
+        printTitle();
+        String playerName = readName(in);
+        int difficulty = readChoice(in, 1, 3, "Difficulty (1 = easy, 2 = normal, 3 = brutal)");
+        System.out.println("Difficulty: " + difficultyName(difficulty));
+        System.out.println("");
 
+        int health = MAX_HEALTH, playerCol = 1;
+        final int playerRow = 2, enemyRow = 2, enemyCol = 9;
+        String enemyName = "Cave Goblin";
+        int enemyHealth = 30 + difficulty * 15;
+        int enemyPower = 4 + difficulty * 3;
+
+        String[] itemNames = new String[PACK_SLOTS];
+        int[] itemCounts = new int[PACK_SLOTS];
+        int itemSlots = 0;
+        itemNames[0] = "Potion";  itemCounts[0] = 2;  itemSlots++;
+        itemNames[1] = "Bomb";    itemCounts[1] = 1;  itemSlots++;
+
+        int[] damageLog = new int[20];
+        int loggedTurns = 0;
+
+        char[][] arena = newArena();
+        arena[playerRow][playerCol] = '@';
+        arena[enemyRow][enemyCol]   = 'X';
+
+        openingCeremony(in, playerName, health, enemyName, enemyHealth);
+
+        int turnNumber = 1;
+        boolean playing = true, fled = false;
+
+        while (playing) {
+            printBanner("Turn " + turnNumber);
+            printFighters(playerName, health, enemyName, enemyHealth);
+            drawArena(arena);
+            printInventory(itemNames, itemCounts, itemSlots);
+
+            boolean adjacent = isAdjacent(playerRow, playerCol, enemyRow, enemyCol);
+            int roll = (turnNumber * 3) % 10 + 1;
+            String action = readAction(in, adjacent, enemyName);
+            int damage = 0;
+
+            switch (action) {
+                case "A" -> damage = attack(adjacent, enemyPower, roll);
+
+                case "L", "R" -> {
+                    int target = playerCol + (action.equals("L") ? -1 : 1);
+                    char cell = peek(arena, playerRow, target);
+
+                    if (cell == '#' || cell == 'X') {
+                        System.out.println(cell == '#' ? "The wall stops you."
+                                                       : "The " + enemyName + " blocks your way.");
+                    } else {
+                        arena[playerRow][playerCol] = ' ';
+                        playerCol = target;
+                        arena[playerRow][playerCol] = '@';
+                        System.out.println(action.equals("L") ? "You step left." : "You step right.");
+                    }
+                }
+
+                case "D" -> health = defend(health);
+
+                case "P" -> {
+                    int slot = findItem(itemNames, itemSlots, "Potion");
+                    if (slot >= 0 && itemCounts[slot] > 0) {
+                        itemCounts[slot]--;
+                        health = drinkPotion(health);
+                    } else {
+                        System.out.println("You reach for a potion. There are none.");
+                    }
+                }
+
+                case "F" -> fled = flee();
+
+                default -> System.out.println("The crowd jeers. You hesitate and lose the turn.");
+            }
+
+            enemyHealth = applyDamage(enemyHealth, damage);
+
+            if (loggedTurns < damageLog.length) {
+                damageLog[loggedTurns++] = damage;
+            }
+
+            health = enemyResponse(fled, adjacent, health, enemyHealth, enemyPower, enemyName);
+            printHealthBar(health);
+
+            playing = !endOfFight(fled, health, enemyHealth, enemyName, turnNumber);
+            turnNumber++;
+        }
+
+        System.out.printf("Average damage per turn: %.1f%n", average(damageLog, loggedTurns));
+        System.out.printf("%nThe arena empties after %d turns.%n", turnNumber - 1);
+    }
+
+    // ================= arrays (new today) =================
+
+    static char[][] newArena() {
+        char[][] arena = new char[ROWS][COLS];
+
+        for (int r = 0; r < arena.length; r++) {
+            for (int c = 0; c < arena[r].length; c++) {
+                boolean edge = (r == 0 || r == arena.length - 1
+                             || c == 0 || c == arena[r].length - 1);
+                arena[r][c] = edge ? '#' : ' ';
+            }
+        }
+        return arena;
+    }
+
+    static char peek(char[][] arena, int row, int col) {
+        if (row < 0 || row >= arena.length) return '#';
+        if (col < 0 || col >= arena[row].length) return '#';
+        return arena[row][col];
+    }
+
+    static void printInventory(String[] names, int[] counts, int slots) {
+        System.out.println("-- Pack --");
+        for (int i = 0; i < slots; i++) {
+            System.out.printf("  %d) %-10s x%d%n", i + 1, names[i], counts[i]);
+        }
+        System.out.println("");
+    }
+
+    static int findItem(String[] names, int slots, String wanted) {
+        for (int i = 0; i < slots; i++) {
+            if (names[i].equals(wanted)) return i;
+        }
+        return -1;
+    }
+
+    static double average(int[] log, int used) {
+        if (used == 0) return 0.0;
+        int total = 0;
+        for (int i = 0; i < used; i++) total += log[i];
+        return (double) total / used;
+    }
+
+    // ================= output =================
+
+    static void printTitle() {
+        System.out.print("""
+                ========================
+                     THE ARENA
+                ========================
+                """);
         System.out.println("Sand, torchlight, and a crowd that has already decided how this ends.");
         System.out.println("The gate opens.");
         System.out.println("");
+    }
 
-        System.out.print("What is your name, challenger? ");
-        String playerName = in.nextLine().trim();
-        if (playerName.isEmpty()) {
-            playerName = "Challenger";
+    static void openingCeremony(Scanner in, String name, int hp, String enemy, int enemyHp) {
+        printStatus(name, hp, MAX_HEALTH, STARTING_GOLD, 1);
+        System.out.printf("%s enters the arena. The %s has %d HP.%n", name, enemy, enemyHp);
+        System.out.print("Press Enter to begin...");
+        in.nextLine();
+        System.out.println("");
+        countdown(3);
+        System.out.println("");
+    }
+
+    static void printBanner(String text) {
+        System.out.println("=".repeat(40));
+        System.out.printf("  %s%n", text);
+    }
+
+    static void printStatus(String name, int hp, int maxHp, int gold, int level) {
+        System.out.printf("%-12s HP %3d/%3d  Gold %4d  Lv %d%n", name, hp, maxHp, gold, level);
+        System.out.println("");
+    }
+
+    static void printFighters(String name, int hp, String enemy, int enemyHp) {
+        System.out.printf("%-12s HP %3d/%3d    %-14s HP %3d%n", name, hp, MAX_HEALTH, enemy, enemyHp);
+        System.out.println("");
+    }
+
+    static void printHealthBar(int hp) {
+        int bars = hp / 5;
+        System.out.printf("[%s] %d%%%n", "#".repeat(bars) + "-".repeat(20 - bars), hp);
+    }
+
+    static void countdown(int from) {
+        for (int i = from; i > 0; i--) {
+            System.out.println(i + "...");
         }
+        System.out.println("FIGHT!");
+    }
 
-        System.out.print("Difficulty (1 = easy, 2 = normal, 3 = brutal): ");
-        int difficulty = in.nextInt();
-        in.nextLine();   // consume the leftover newline.
+    static void drawArena(char[][] arena) {
+        for (char[] row : arena) {
+            System.out.println(new String(row));
+        }
+        System.out.println("");
+    }
 
-        String difficultyName = switch (difficulty) {
+    // ================= input =================
+
+    static String readName(Scanner in) {
+        System.out.print("What is your name, challenger? ");
+        String name = in.nextLine().trim();
+        return name.isEmpty() ? "Challenger" : name;
+    }
+
+    static int readChoice(Scanner in, int min, int max, String prompt) {
+        int choice;
+        do {
+            System.out.printf("%s: ", prompt);
+            while (!in.hasNextInt()) {
+                in.next();
+                System.out.printf("Numbers only. %s: ", prompt);
+            }
+            choice = in.nextInt();
+            in.nextLine();
+        } while (choice < min || choice > max);
+        return choice;
+    }
+
+    static String readAction(Scanner in, boolean adjacent, String enemyName) {
+        if (adjacent) {
+            System.out.print("[A]ttack  [D]efend  [P]otion  [L]eft  [R]ight  [F]lee: ");
+        } else {
+            System.out.print("The " + enemyName + " is out of reach.  "
+                             + "[L]eft  [R]ight  [D]efend  [P]otion  [F]lee: ");
+        }
+        return in.nextLine().trim().toUpperCase();
+    }
+
+    // ================= things that give a value back =================
+
+    static String difficultyName(int difficulty) {
+        return switch (difficulty) {
             case 1 -> "Easy";
             case 2 -> "Normal";
             case 3 -> "Brutal";
             default -> "Unknown";
         };
-        System.out.println("Difficulty selected: " + difficultyName);
-        System.out.println("");
+    }
 
-        int health = MAX_HEALTH;
-        int gold = STARTING_GOLD;
-        int level = 1;
-        boolean alive = true;
-        double critChance = 0.15;
+    static boolean isAlive(int hp) {
+        return hp > 0;
+    }
 
-        String enemyName = "Cave Goblin";
-        int enemyHealth = 30 + difficulty * 15;
-        int enemyPower = 4 + difficulty * 3;
+    static boolean isAdjacent(int r1, int c1, int r2, int c2) {
+        return r1 == r2 && Math.abs(c1 - c2) == 1;
+    }
 
-        System.out.printf("%-12s HP %3d/%3d  Gold %4d  Lv %d%n",
-                          playerName, health, MAX_HEALTH, gold, level);
-        System.out.printf("Alive %-5b  Crit %.0f%%%n", alive, critChance * 100);
-        System.out.println("");
+    static int calculateDamage(int power, int roll) {
+        if (roll >= 9) return power * 2;
+        if (roll >= 3) return power;
+        return 0;
+    }
 
-        System.out.printf("%s enters the arena. The %s has %d HP.%n",
-                          playerName, enemyName, enemyHealth);
-        System.out.print("Press Enter to begin...");
-        in.nextLine();
-        System.out.println("");
+    static int calculateDamage(int power, int roll, double critMultiplier) {
+        if (roll >= 9) return (int) (power * critMultiplier);
+        if (roll >= 3) return power;
+        return 0;
+    }
 
-        System.out.println(enemyName.toUpperCase() + " blocks your path!");
-        System.out.printf("Opponent %-14s HP %3d  Power %2d%n",
-                          enemyName, enemyHealth, enemyPower);
-        System.out.println("Name length: " + enemyName.length());
+    static int applyDamage(int hp, int damage) {
+        return hp - damage;
+    }
 
-        boolean isBoss = enemyName.contains("Dragon");
-        System.out.println("Boss fight: " + isBoss);
+    static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
 
-        if (enemyName.equalsIgnoreCase("cave goblin")) {
-            System.out.println("You have fought one of these before.");
+    static int attack(boolean adjacent, int enemyPower, int roll) {
+        if (!adjacent) {
+            System.out.println("You swing at empty air. Get closer first.");
+            return 0;
         }
-        System.out.println("");
+        int damage = calculateDamage(enemyPower, roll);
+        if (damage == 0)                   System.out.println("You miss.");
+        else if (damage > enemyPower)      System.out.println("CRITICAL HIT!");
+        else                               System.out.println("A solid hit.");
+        return damage;
+    }
 
-        int damage = enemyPower * 2;
-        health -= damage;
-        System.out.println("You take " + damage + " damage. Health: " + health);
+    static int defend(int health) {
+        System.out.println("You raise your guard and recover 5 HP.");
+        return health + 5;
+    }
 
-        int potion = 15;
-        health += potion;
-        level++;
-        System.out.println("You drink a potion. Health: " + health);
-        System.out.println("You reach level " + level + ".");
-        System.out.println("");
+    static int drinkPotion(int health) {
+        System.out.println("You drink a potion and recover 25 HP.");
+        return health + 25;
+    }
 
-        int hits = 3;
-        int swings = 7;
+    static boolean flee() {
+        System.out.println("You run for the gate. The crowd howls.");
+        return true;
+    }
 
-        int brokenAccuracy = hits / swings * 100;
-        System.out.println("Accuracy (broken): " + brokenAccuracy + "%");
-
-        double acc1 = (double) hits / swings * 100;
-        double acc2 = hits * 100.0 / swings;
-
-        System.out.printf("Accuracy (cast):    %.1f%%%n", acc1);
-        System.out.printf("Accuracy (reorder): %.1f%%%n", acc2);
-        System.out.println("");
-
-        int turn = 6;
-        boolean enrages = (turn % 3 == 0);
-        System.out.println("Turn " + turn + " — enrages: " + enrages);
-        System.out.println("");
-
-        double critDamage = damage * 1.75;
-        int applied = (int) critDamage;
-        System.out.println("Crit damage (double): " + critDamage);
-        System.out.println("Crit damage (int):    " + applied);
-        System.out.println("Lost to the cast:     " + (critDamage - applied));
-        System.out.println("");
-
-        int roll = 7;
-        int damage2 = 0;
-        int potions = 2;
-
-        System.out.print("[A]ttack  [D]efend  [P]otion  [F]lee: ");
-        String action = in.nextLine().trim().toUpperCase();
-        System.out.println("");
-
-        switch (action) {
-            case "A" -> {
-                if (roll >= 9) {
-                    damage2 = enemyPower * 2;
-                    System.out.println("CRITICAL HIT!");
-                } else if (roll >= 3) {
-                    damage2 = enemyPower;
-                    System.out.println("A solid hit.");
-                } else {
-                    damage2 = 0;
-                    System.out.println("You miss.");
-                }
-            }
-            case "D" -> {
-                health += 5;
-                System.out.println("You brace yourself defensively and recover 5 health.");
-            }
-            case "P" -> {
-                if (potions > 0) {
-                    health += 25;
-                    potions--;
-                    System.out.println("You drink a healing potion.");
-                } else {
-                    System.out.println("You have no potions left!");
-                }
-            }
-            case "F" -> {
-                alive = false;
-                System.out.println("You flee from the arena!");
-            }
-            default -> {
-                damage2 = 0;
-                System.out.println("Invalid action. You lose your window to strike.");
-            }
+    static int enemyResponse(boolean fled, boolean adjacent, int health,
+                             int enemyHealth, int enemyPower, String enemyName) {
+        if (!fled && isAlive(enemyHealth) && adjacent) {
+            health = applyDamage(health, enemyPower);
+            System.out.printf("The %s strikes back for %d.%n", enemyName, enemyPower);
         }
-        System.out.println("");
+        return clamp(health, 0, MAX_HEALTH);
+    }
 
-        String potionWord = potions == 1 ? "potion" : "potions";
-        String statusWord = health > (MAX_HEALTH / 2) ? "steady" : "faltering";
-        System.out.printf("Inventory status: %d %s remaining. Condition: %s.%n%n", 
-                          potions, potionWord, statusWord);
-
-        enemyHealth -= damage2;
-        System.out.printf("%s has %d HP left.%n", enemyName, enemyHealth);
-
-        if (enemyHealth <= 0) {
-            System.out.println("The " + enemyName + " falls!");
-            alive = true;
-        } else if (health <= 0) {
-            System.out.println("You have fallen.");
-            alive = false;
+    static boolean endOfFight(boolean fled, int health, int enemyHealth,
+                              String enemyName, int turnNumber) {
+        if (fled) {
+            System.out.println("You escape with your life, and nothing else.");
+            return true;
         }
-
-        if (swings > 0 && hits / swings > 0.5) {
-            System.out.println("Your aim is holding up.");
+        if (!isAlive(enemyHealth)) {
+            System.out.printf("%nThe %s falls! You win on turn %d.%n", enemyName, turnNumber);
+            return true;
         }
-        if (health < MAX_HEALTH / 4 && gold >= 10) {
-            System.out.println("You should buy a potion.");
+        if (!isAlive(health)) {
+            System.out.printf("%nYou have fallen on turn %d.%n", turnNumber);
+            return true;
         }
-        if (!alive || enemyHealth <= 0) {
-            System.out.println("The fight is over.");
-        }
-        System.out.println("");
-
-        if (health > MAX_HEALTH) {
-            health = MAX_HEALTH;
-        } else if (health < 0) {
-            health = 0;
-        }
-
-        int bars = health / 5;
-        String bar = "#".repeat(bars) + "-".repeat(20 - bars);
-        System.out.printf("[%s] %d%%%n", bar, health);
+        return false;
     }
 }
