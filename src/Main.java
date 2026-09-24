@@ -1,5 +1,6 @@
 
 import java.util.Scanner;
+    import java.util.Random;
 
 public class Main {
 
@@ -12,13 +13,16 @@ public class Main {
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
 
+        Random rng = new Random(42);
+
         printTitle();
         String playerName = readName(in);
         int difficulty = readChoice(in, 1, 3, "Difficulty (1 = easy, 2 = normal, 3 = brutal)");
         System.out.println("Difficulty: " + difficultyName(difficulty));
         System.out.println("");
 
-        int health = MAX_HEALTH, playerCol = 1;
+        int health = MAX_HEALTH, gold = STARTING_GOLD, playerCol = 1;
+        int level = 1;
         final int playerRow = 2, enemyRow = 2, enemyCol = 9;
         String enemyName = "Cave Goblin";
         int enemyHealth = 30 + difficulty * 15;
@@ -49,7 +53,7 @@ public class Main {
             printInventory(itemNames, itemCounts, itemSlots);
 
             boolean adjacent = isAdjacent(playerRow, playerCol, enemyRow, enemyCol);
-            int roll = (turnNumber * 3) % 10 + 1;
+            int roll = rng.nextInt(1, 11);
             String action = readAction(in, adjacent, enemyName);
             int damage = 0;
 
@@ -95,17 +99,61 @@ public class Main {
             }
 
             health = enemyResponse(fled, adjacent, health, enemyHealth, enemyPower, enemyName);
+            
             printHealthBar(health);
 
-            playing = !endOfFight(fled, health, enemyHealth, enemyName, turnNumber);
-            turnNumber++;
+                        boolean over = endOfFight(fled, health, enemyHealth, enemyName, turnNumber);
+            if (over && !fled && !isAlive(enemyHealth)) {
+                String loot = rollLoot(rng);
+                if (loot.equals("Relic")) {
+                    level++;
+                    System.out.println("The relic hums. You reach level " + level + ".");
+                }
+                itemSlots = awardLoot(loot, itemNames, itemCounts, itemSlots);
+            }
+            playing = !over;
         }
 
+        System.out.printf("%nGold: %d%n", gold);
         System.out.printf("Average damage per turn: %.1f%n", average(damageLog, loggedTurns));
         System.out.printf("%nThe arena empties after %d turns.%n", turnNumber - 1);
+        verifyLootTable(rng, 1000);
     }
 
-    // ================= arrays (new today) =================
+        static String rollLoot(Random rng) {
+            int roll = rng.nextInt(100);
+            if (roll < 50) return "Potion";
+            if (roll < 80) return "Coin Pouch";
+            if (roll < 95) return "Shield";
+            return "Relic";
+        }
+
+        static int awardLoot(String loot, String[] names, int[] counts, int slots) {
+            int existing = findItem(names, slots, loot);
+            if (existing >= 0) { counts[existing]++; return slots; }
+            if (slots >= names.length) { System.out.println("Your pack is full!"); return slots; }
+            names[slots] = loot;
+            counts[slots] = 1;
+            return slots + 1;
+        }
+
+        static void verifyLootTable(Random rng, int rolls) {
+            int[] counts = new int[4];
+            for (int i = 0; i < rolls; i++) {
+                String loot = rollLoot(rng);
+                if (loot.equals("Potion"))          counts[0]++;
+                else if (loot.equals("Coin Pouch")) counts[1]++;
+                else if (loot.equals("Shield"))     counts[2]++;
+                else                           counts[3]++;
+            }
+            String[] labels = {"Potion", "Coin Pouch", "Shield", "Relic"};
+            System.out.printf("%n-- Loot table over %d rolls --%n", rolls);
+            for (int i = 0; i < labels.length; i++) {
+                System.out.printf("  %-11s %5.1f%%%n", labels[i], counts[i] * 100.0 / rolls);
+            }
+        }
+
+        // ================= arrays =================
 
     static char[][] newArena() {
         char[][] arena = new char[ROWS][COLS];
@@ -148,7 +196,7 @@ public class Main {
         return (double) total / used;
     }
 
-    // ================= output =================
+        // ================= output =================
 
     static void printTitle() {
         System.out.print("""
@@ -268,13 +316,9 @@ public class Main {
         return 0;
     }
 
-    static int applyDamage(int hp, int damage) {
-        return hp - damage;
-    }
+    static int applyDamage(int hp, int damage) { return hp - damage; }
 
-    static int clamp(int value, int min, int max) {
-        return Math.max(min, Math.min(max, value));
-    }
+    static int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
 
     static int attack(boolean adjacent, int enemyPower, int roll) {
         if (!adjacent) {
@@ -282,9 +326,9 @@ public class Main {
             return 0;
         }
         int damage = calculateDamage(enemyPower, roll);
-        if (damage == 0)                   System.out.println("You miss.");
-        else if (damage > enemyPower)      System.out.println("CRITICAL HIT!");
-        else                               System.out.println("A solid hit.");
+        if (damage == 0)              System.out.println("You miss.");
+        else if (damage > enemyPower) System.out.println("CRITICAL HIT!");
+        else                          System.out.println("A solid hit.");
         return damage;
     }
 
